@@ -1,0 +1,36 @@
+# 5 分钟冒烟配置：只用来验证代码能跑通，不看指标。
+# 每次改完代码先过这个，再上 base 训练。
+
+seed: 42
+
+data:
+  root: "D:/zzr/data/visdrone"
+  clip_len: 8
+  pred_len: 5
+  stride: 2
+  img_size: 96          # 缩小 4 倍，速度约快 16 倍
+  grid: 24
+
+model:
+  patch: 16             # 96/16 = 6 → 每帧 36 个 token
+  dim: 96
+  depth: 2
+  heads: 3
+  mlp_ratio: 4
+  pred_depth: 2
+  ema_tau: 0.996
+  vicreg_var: 0.04
+  vicreg_cov: 0.01
+
+train:
+  batch: 8
+  lr: 0.001
+  weight_decay: 0.05
+  warmup_epochs: 0
+  steps_per_epoch: 100
+  epochs: 5
+  amp: bf16
+  grad_clip: 1.0
+
+eval:
+  horizons: [1, 2, 3, 4, 5]

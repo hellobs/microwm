@@ -1,0 +1,33 @@
+seed: 42
+
+data:
+  root: "D:/zzr/data/visdrone"
+  clip_len: 8          # 输入帧数 T_in
+  pred_len: 5          # 预测步数 T_out
+  stride: 2            # 30fps 抽到 15fps，减少冗余
+  img_size: 192
+  grid: 48             # 占据栅格边长（img_size / 4）
+
+model:
+  patch: 16
+  dim: 192
+  depth: 6
+  heads: 3
+  mlp_ratio: 4
+  pred_depth: 4
+  ema_tau: 0.996
+  vicreg_var: 0.04
+  vicreg_cov: 0.01
+
+train:
+  batch: 8
+  lr: 0.001
+  weight_decay: 0.05
+  warmup_epochs: 3
+  steps_per_epoch: 500
+  epochs: 20
+  amp: bf16
+  grad_clip: 1.0
+
+eval:
+  horizons: [1, 2, 3, 4, 5]

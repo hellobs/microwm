@@ -1,0 +1,12 @@
+# torch 必须从 cu128 源装（Blackwell sm_120 的硬要求），不能用默认源：
+#   pip install torch==2.9.1 torchvision --index-url https://download.pytorch.org/whl/cu128
+torch==2.9.1
+torchvision
+numpy>=1.26
+opencv-python-headless>=4.10
+matplotlib>=3.8
+pandas>=2.2
+scikit-learn>=1.5
+pyyaml>=6.0
+tqdm>=4.66
+tensorboard>=2.16
