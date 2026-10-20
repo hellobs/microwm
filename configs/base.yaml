@@ -1,7 +1,7 @@
 seed: 42
 
 data:
-  root: "D:/zzr/data/visdrone"
+  root: "D:/zzr/data/visdrone/processed"
   clip_len: 8          # 输入帧数 T_in
   pred_len: 5          # 预测步数 T_out
   stride: 2            # 30fps 抽到 15fps，减少冗余
@@ -11,7 +11,8 @@ data:
   grid_h: 27
 
 model:
-  patch: 12            # 192/12=16, 108/12=9 → 每帧 144 个 token
+  patch: 6             # 目标中位边长 7.5 px（192 宽），patch 必须 ≤6 才有意义
+                       # 192/6=32, 108/6=18 → 每帧 576 个 token
   dim: 192
   depth: 6
   heads: 3
@@ -22,11 +23,12 @@ model:
   vicreg_cov: 0.01
 
 train:
-  batch: 8
+  batch: 4             # 576 token 下 8 GB 显存只能到 4（实测峰值 6.8 GB）
+  grad_accum: 2        # 有效 batch 8
   lr: 0.001
   weight_decay: 0.05
   warmup_epochs: 3
-  steps_per_epoch: 500
+  steps_per_epoch: 400
   epochs: 20
   amp: bf16
   grad_clip: 1.0

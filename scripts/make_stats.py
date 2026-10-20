@@ -90,7 +90,9 @@ def parse(root: Path) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", required=True)
-    ap.add_argument("--patch", type=int, default=12, help="模型 patch 边长（缩放后像素）")
+    ap.add_argument("--patch", type=int, default=6, help="模型 patch 边长（缩放后像素）")
+    ap.add_argument("--img-w", type=int, default=192, help="模型输入宽度")
+    ap.add_argument("--src-w", type=int, default=1344, help="原图宽度")
     ap.add_argument("--out", default="outputs/figs/stats.png")
     args = ap.parse_args()
 
@@ -121,15 +123,17 @@ def main() -> int:
 
     # 3 目标尺寸：这是"为什么小目标难"的核心论据
     ax = axes[1, 0]
-    side = np.sqrt(d["areas"])
-    ax.hist(side, bins=80, range=(0, np.percentile(side, 99)), color="#EF9F27")
+    scale = args.img_w / args.src_w          # 原图像素 → 模型输入像素
+    side = np.sqrt(d["areas"]) * scale
+    ax.hist(side, bins=80, range=(0, max(args.patch * 12, np.percentile(side, 99))), color="#EF9F27")
     for p, c, lab in ((args.patch, "#A32D2D", f"patch {args.patch}px"),
                       (args.patch * 2, "#5F5E5A", f"{args.patch * 2}px")):
         ax.axvline(p, color=c, ls="--", lw=1.2, label=lab)
     thresh = (side < args.patch).mean() * 100
-    ax.set_xlabel(L("目标等效边长（原图像素，√面积）", "object side (px, sqrt area)"))
+    ax.set_xlabel(L(f"目标等效边长（模型输入像素，√面积，÷{1/scale:.0f}）",
+                    f"object side (model px, sqrt area, /{1/scale:.0f})"))
     ax.set_ylabel(L("框数量", "boxes"))
-    ax.set_title(L(f"(c) 尺寸分布：{thresh:.0f}% 小于一个 patch", f"(c) Size: {thresh:.0f}% below one patch"),
+    ax.set_title(L(f"(c) 尺寸分布：{thresh:.0f}% 小于 1 个 patch", f"(c) Size: {thresh:.0f}% below 1 patch"),
                  fontsize=11)
     ax.legend(fontsize=8)
 
@@ -139,6 +143,7 @@ def main() -> int:
                   cmap="magma", cmin=1)
     ax.set_xlim(0, 1)
     ax.set_ylim(1, 0)
+    ax.set_facecolor("#12100e")
     ax.set_xlabel(L("水平位置（归一化）", "x (normalised)"))
     ax.set_ylabel(L("垂直位置（归一化，0=顶部）", "y (normalised, 0=top)"))
     ax.set_title(L("(d) 目标出现位置", "(d) Spatial distribution"), fontsize=11)

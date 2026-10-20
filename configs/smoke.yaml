@@ -4,7 +4,7 @@
 seed: 42
 
 data:
-  root: "D:/zzr/data/visdrone"
+  root: "D:/zzr/data/visdrone/processed"
   clip_len: 8
   pred_len: 5
   stride: 2

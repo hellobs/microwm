@@ -46,13 +46,14 @@ Honest bookkeeping: *code written* and *verified to run* are different things, a
 
 | Component | Code | Verified |
 |---|---|---|
-| Environment check (`scripts/check_env.py`) | done | pending |
-| Dataset downloader (`scripts/download_data.py`) — parallel ranges, resumable | done | validation split fetched and extracted |
+| Environment check (`scripts/check_env.py`) | done | `torch 2.9.1+cu128`, compute capability `(12, 0)`, 8 GiB |
+| Dataset downloader (`scripts/download_data.py`) — parallel ranges, resumable | done | validation and training splits fetched |
 | Preprocessing → per-sequence `npy` + normalised boxes | done | pending full run |
 | Occupancy-grid dataset (memmap, clip sampler) | done | pending |
-| ViT encoder + EMA target encoder + VICReg | planned | — |
-| Autoregressive latent predictor | planned | — |
-| Linear probe, persistence / linear-extrapolation / ConvLSTM baselines | planned | — |
+| Data statistics (four-panel figure) | done | run on the validation split |
+| ViT encoder + EMA target encoder + VICReg | done | forward/backward and rollout smoke-tested |
+| Autoregressive latent predictor | done | smoke-tested |
+| Linear probe, persistence / linear-extrapolation / ConvLSTM baselines | probe head written, baselines planned | — |
 | Training and evaluation entry points | planned | — |
 | Paper (LaTeX) | planned | — |
 
