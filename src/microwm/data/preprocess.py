@@ -66,7 +66,7 @@ def read_annotation(path: Path) -> dict[int, list[tuple[int, float, float, float
     return out
 
 
-def process_sequence(seq_dir: Path, ann_file: Path, size: int) -> dict | None:
+def process_sequence(seq_dir: Path, ann_file: Path, width: int, height: int) -> dict | None:
     frames = sorted(p for p in seq_dir.iterdir() if p.suffix.lower() == ".jpg")
     if len(frames) < 8:
         return None
@@ -80,12 +80,12 @@ def process_sequence(seq_dir: Path, ann_file: Path, size: int) -> dict | None:
         return None
     oh, ow = first.shape[:2]
 
-    imgs = np.zeros((len(frames), size, size, 3), dtype=np.uint8)
+    imgs = np.zeros((len(frames), height, width, 3), dtype=np.uint8)
     for i, fp in enumerate(frames):
         im = cv2.imread(str(fp))
         if im is None:
             continue
-        im = cv2.resize(im, (size, size), interpolation=cv2.INTER_AREA)
+        im = cv2.resize(im, (width, height), interpolation=cv2.INTER_AREA)
         imgs[i] = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
 
     fr: list[int] = []
@@ -115,7 +115,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", required=True, help="解压后的 VisDrone2019-MOT-* 目录")
     ap.add_argument("--split", default="val", choices=["train", "val", "test-dev"])
-    ap.add_argument("--size", type=int, default=192)
+    ap.add_argument("--width", type=int, default=192)
+    ap.add_argument("--height", type=int, default=108)
     ap.add_argument("--out", default="D:/zzr/data/visdrone/processed")
     args = ap.parse_args()
 
@@ -129,7 +130,7 @@ def main() -> int:
     print(f"{args.split}: {len(seqs)} 个序列 @ {seq_root}")
 
     for seq_dir in tqdm(seqs, desc="处理"):
-        rec = process_sequence(seq_dir, ann_root / f"{seq_dir.name}.txt", args.size)
+        rec = process_sequence(seq_dir, ann_root / f"{seq_dir.name}.txt", args.width, args.height)
         if rec is None:
             continue
         dst = out_root / seq_dir.name

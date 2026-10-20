@@ -5,11 +5,13 @@ data:
   clip_len: 8          # 输入帧数 T_in
   pred_len: 5          # 预测步数 T_out
   stride: 2            # 30fps 抽到 15fps，减少冗余
-  img_size: 192
-  grid: 48             # 占据栅格边长（img_size / 4）
+  img_w: 192           # 1344×756 的 1/7，零畸变
+  img_h: 108
+  grid_w: 48           # 占据栅格 = img/4
+  grid_h: 27
 
 model:
-  patch: 16
+  patch: 12            # 192/12=16, 108/12=9 → 每帧 144 个 token
   dim: 192
   depth: 6
   heads: 3

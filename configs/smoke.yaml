@@ -1,4 +1,4 @@
-# 5 分钟冒烟配置：只用来验证代码能跑通，不看指标。
+# 5 分钟冒烟配置：只验证代码能跑通，不看指标。
 # 每次改完代码先过这个，再上 base 训练。
 
 seed: 42
@@ -8,14 +8,16 @@ data:
   clip_len: 8
   pred_len: 5
   stride: 2
-  img_size: 96          # 缩小 4 倍，速度约快 16 倍
-  grid: 24
+  img_w: 96            # 缩小 4 倍
+  img_h: 54
+  grid_w: 24
+  grid_h: 14
 
 model:
-  patch: 16             # 96/16 = 6 → 每帧 36 个 token
-  dim: 96
+  patch: 6             # 96/6=16, 54/6=9 → 仍是 144 个 token，但维度更小
+  dim: 64
   depth: 2
-  heads: 3
+  heads: 2
   mlp_ratio: 4
   pred_depth: 2
   ema_tau: 0.996

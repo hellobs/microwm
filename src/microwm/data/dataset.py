@@ -13,26 +13,26 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-G = 48  # 占据栅格边长，需与 config.data.grid 一致
+G_W, G_H = 48, 27  # 占据栅格尺寸：192/4 × 108/4，与 config 一致
 
 
-def rasterize(xywh: np.ndarray, grid: int = G) -> np.ndarray:
-    """把归一化 bbox 画进 grid×grid 的二值占据图。
+def rasterize(xywh: np.ndarray, gw: int = G_W, gh: int = G_H) -> np.ndarray:
+    """把归一化 bbox 画进 gh×gw 的二值占据图。
 
     直接取整数格范围填充，不做面积阈值——宁可略大（recall 优先），
     因为小目标（20–40 px）在 48 格上本来就只占 1 格。
     """
-    occ = np.zeros((grid, grid), dtype=np.float32)
+    occ = np.zeros((gh, gw), dtype=np.float32)
     if len(xywh) == 0:
         return occ
-    x0 = np.floor(xywh[:, 0] * grid).astype(int)
-    y0 = np.floor(xywh[:, 1] * grid).astype(int)
-    x1 = np.ceil((xywh[:, 0] + xywh[:, 2]) * grid).astype(int)
-    y1 = np.ceil((xywh[:, 1] + xywh[:, 3]) * grid).astype(int)
-    np.clip(x0, 0, grid, out=x0)
-    np.clip(y0, 0, grid, out=y0)
-    np.clip(x1, 0, grid, out=x1)
-    np.clip(y1, 0, grid, out=y1)
+    x0 = np.floor(xywh[:, 0] * gw).astype(int)
+    y0 = np.floor(xywh[:, 1] * gh).astype(int)
+    x1 = np.ceil((xywh[:, 0] + xywh[:, 2]) * gw).astype(int)
+    y1 = np.ceil((xywh[:, 1] + xywh[:, 3]) * gh).astype(int)
+    np.clip(x0, 0, gw, out=x0)
+    np.clip(y0, 0, gh, out=y0)
+    np.clip(x1, 0, gw, out=x1)
+    np.clip(y1, 0, gh, out=y1)
     for a, b, c, d in zip(y0, y1, x0, x1):
         if b > a and d > c:
             occ[a:b, c:d] = 1.0
@@ -54,13 +54,15 @@ class ClipDataset(Dataset):
         clip_len: int = 8,
         pred_len: int = 5,
         stride: int = 2,
-        grid: int = G,
+        grid_w: int = G_W,
+        grid_h: int = G_H,
     ) -> None:
         self.root = Path(root) / split
         self.clip_len = clip_len
         self.pred_len = pred_len
         self.stride = stride
-        self.grid = grid
+        self.grid_w = grid_w
+        self.grid_h = grid_h
         self.span = (clip_len + pred_len - 1) * stride + 1
 
         index = json.loads((self.root / "index.json").read_text(encoding="utf-8"))
@@ -97,7 +99,8 @@ class ClipDataset(Dataset):
         idx = [start + k * self.stride for k in range(total)]
 
         frames = np.stack([np.asarray(imgs[j], dtype=np.float32) / 127.5 - 1.0 for j in idx])
-        occs = np.stack([rasterize(per_frame.get(j, np.zeros((0, 4), np.float32)), self.grid)
+        occs = np.stack([rasterize(per_frame.get(j, np.zeros((0, 4), np.float32)),
+                                   self.grid_w, self.grid_h)
                          for j in idx])
 
         t_in = self.clip_len
