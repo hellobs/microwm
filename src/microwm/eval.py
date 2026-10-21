@@ -45,6 +45,7 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=120)
     ap.add_argument("--horizon", type=int, default=5)
     ap.add_argument("--out", default="")
+    ap.add_argument("--sweep", action="store_true", help="扫描预测阈值，选 F1 最优")
     args = ap.parse_args()
 
     ck = torch.load(args.ckpt, map_location="cpu")
@@ -85,6 +86,17 @@ def main() -> int:
                 base["iou"][h].append(float(iou_all(prev, g)))
                 base["rnew"][h].append(float(recall_new(prev, g, prev)))
                 base["pocc"][h].append(float(precision_occ(prev, g)))
+
+    if args.sweep:
+        print("\n阈值扫描（h=3 上的 R_new / P_occ / F1）")
+        print(f"{'thr':>5} | {'R_new':>6} | {'P_occ':>6} | {'F1':>6}")
+        print("-" * 32)
+        for thr in [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5]:
+            r = np.array(acc["rnew"][2]); p_ = np.array(acc["pocc"][2])
+            r = np.nanmean(r); p_ = np.nanmean(p_)
+            f1 = 2 * r * p_ / (r + p_ + 1e-6)
+            print(f"{thr:5.2f} | {r:6.3f} | {p_:6.3f} | {f1:6.3f}")
+        print()
 
     rows = []
     print(f"\n{'h':>2} | {'IoU_all':>16} | {'R_new':>16} | {'P_occ':>16} | {'cos闭环':>7}")
