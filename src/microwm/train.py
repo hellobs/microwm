@@ -136,8 +136,13 @@ def train_jepa(cfg: dict, args) -> Path:
                                  pred=f"{float(r['pred']):.3f}",
                                  var=f"{float(r['var']):.3f}")
 
+            if step > 0 and step % args.save_every == 0:
+                path = out_dir / f"ckpt_{step:05d}.pt"
+                torch.save({"model": model.state_dict(), "cfg": cfg, "step": step}, path)
+                writer.add_scalar("val/ckpt_saved", 1.0, step)
+
             if step > 0 and step % args.eval_every == 0:
-                m = evaluate(model, val_loader, max_batches=10, horizons=cfg["data"]["pred_len"])
+                m = evaluate(model, val_loader, max_batches=5, horizons=cfg["data"]["pred_len"])
                 for h, v in enumerate(m["cos_closed"]):
                     writer.add_scalar(f"val/cos_closed_h{h + 1}", v, step)
                 print(f"\n[step {step}] 闭环隐空间余弦: "
@@ -207,7 +212,8 @@ def main() -> int:
     ap.add_argument("--config", default="configs/smoke.yaml")
     ap.add_argument("--phase", default="jepa", choices=["jepa", "probe"])
     ap.add_argument("--steps", type=int, default=0, help="0 = 用配置里的值")
-    ap.add_argument("--eval-every", type=int, default=200)
+    ap.add_argument("--eval-every", type=int, default=500)
+    ap.add_argument("--save-every", type=int, default=500)
     ap.add_argument("--tag", default="")
     args = ap.parse_args()
 
