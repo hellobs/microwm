@@ -30,6 +30,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from .data.dataset import ClipDataset
+from .data.sampler import SeqShuffleSampler
 from .metrics import iou_all, latent_cosine, nanmean, precision_occ, recall_new
 from .models.microwm import MicroJEPA
 
@@ -47,7 +48,8 @@ def build_loaders(cfg: dict, batch: int) -> tuple[DataLoader, DataLoader]:
     train = ClipDataset(d["root"], "train", **kw)
     val = ClipDataset(d["root"], "val", **kw)
     return (
-        DataLoader(train, batch_size=batch, shuffle=True, num_workers=0, drop_last=True),
+        DataLoader(train, batch_size=batch, sampler=SeqShuffleSampler(train.items),
+                   num_workers=0, drop_last=True),
         DataLoader(val, batch_size=batch, shuffle=False, num_workers=0, drop_last=True),
     )
 

@@ -86,7 +86,7 @@ class ClipDataset(Dataset):
 
     def _load(self, seq: str) -> tuple[np.ndarray, dict]:
         if seq not in self._cache:
-            if len(self._cache) > 8:          # 控制驻留序列数
+            if len(self._cache) > 24:          # 控制驻留序列数
                 self._cache.pop(next(iter(self._cache)))
             imgs = np.load(self.root / seq / "images.npy", mmap_mode="r")
             bx = np.load(self.root / seq / "boxes.npz")

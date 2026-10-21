@@ -4,7 +4,8 @@ data:
   root: "D:/zzr/data/visdrone/processed"
   clip_len: 8          # 输入帧数 T_in
   pred_len: 5          # 预测步数 T_out
-  stride: 2            # 30fps 抽到 15fps，减少冗余
+  stride: 6            # 30fps 抽到 5fps。stride 2 时相邻帧余弦 0.936，
+                       # 预测退化成恒等映射（实测 pred loss 0.03），必须拉开间隔
   img_w: 192           # 1344×756 的 1/7，零畸变
   img_h: 108
   grid_w: 48           # 占据栅格 = img/4
@@ -19,7 +20,7 @@ model:
   mlp_ratio: 4
   pred_depth: 4
   ema_tau: 0.996
-  vicreg_var: 0.04
+  vicreg_var: 0.15     # 预测损失会降到 0.03 量级，0.04 的正则压不住坍缩
   vicreg_cov: 0.01
 
 train:
