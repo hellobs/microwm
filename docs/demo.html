@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>提前一秒看见 · MicroJEPA</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --fg: #e8e6e3;
+    --dim: #8b8f96;
+    --warm: #e8a33d;
+    --line: rgba(232, 230, 227, 0.12);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { width: min(1100px, 100%); }
+
+  header { margin-bottom: 28px; }
+  h1 {
+    font-size: clamp(28px, 4vw, 42px);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.25;
+  }
+  h1 em { color: var(--warm); font-style: normal; }
+  .sub {
+    margin-top: 10px;
+    color: var(--dim);
+    font-size: clamp(13px, 1.5vw, 15px);
+    line-height: 1.7;
+    max-width: 62ch;
+  }
+
+  .stage {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #000;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+  }
+  video { display: block; width: 100%; height: auto; }
+
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    margin-top: 26px;
+    border-top: 1px solid var(--line);
+    padding-top: 22px;
+  }
+  .note .k {
+    color: var(--warm);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .note p {
+    color: var(--dim);
+    font-size: 13.5px;
+    line-height: 1.75;
+  }
+  .note strong { color: var(--fg); font-weight: 500; }
+
+  footer {
+    margin-top: 34px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    color: var(--dim);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+  }
+  footer code { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  @media (max-width: 720px) {
+    .notes { grid-template-columns: 1fr; gap: 14px; }
+    footer { flex-direction: column; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>模型现在看到的，是<em>一秒之后</em>的样子</h1>
+    <p class="sub">
+      一段无人机航拍视频。模型只看过去 8 帧，然后预测 1 秒后画面里哪些地方会被占据。
+      屏幕上的暖色区域就是它的预测——不是它检测到了什么，而是它认为你该往哪里看。
+    </p>
+  </header>
+
+  <div class="stage">
+    <video src="demo.mp4" autoplay muted loop playsinline controls></video>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <div class="k">暖色区域</div>
+      <p>模型的预测。它标出的不是目标本身，而是<strong>未来一秒内可能被占据的位置</strong>。</p>
+    </div>
+    <div class="note">
+      <div class="k">右上小窗</div>
+      <p>同一时刻<strong>真实发生</strong>的情况，青线是人工标注。用来核对预测准不准。</p>
+    </div>
+    <div class="note">
+      <div class="k">为什么不用框</div>
+      <p>精确框选需要很高精度，本模型做不到。但<strong>提示"往哪看"要求的精度低得多</strong>，这就是它的定位。</p>
+    </div>
+  </div>
+
+  <footer>
+    <span>MicroJEPA · 视觉世界模型原型</span>
+    <span><code>4.7M</code> 参数 · 单卡 8GB 可训</span>
+  </footer>
+</div>
+</body>
+</html>

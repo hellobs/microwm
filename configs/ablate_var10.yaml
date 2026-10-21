@@ -1,0 +1,39 @@
+seed: 42
+
+data:
+  root: "D:/zzr/data/visdrone/processed"
+  clip_len: 8          # 输入帧数 T_in
+  pred_len: 5          # 预测步数 T_out
+  stride: 6            # 30fps 抽到 5fps。stride 2 时相邻帧余弦 0.936，
+                       # 预测退化成恒等映射（实测 pred loss 0.03），必须拉开间隔
+  img_w: 192           # 1344×756 的 1/7，零畸变
+  img_h: 108
+  grid_w: 48           # 占据栅格 = img/4
+  grid_h: 27
+
+model:
+  patch: 6             # 目标中位边长 7.5 px（192 宽），patch 必须 ≤6 才有意义
+                       # 192/6=32, 108/6=18 → 每帧 576 个 token
+  dim: 192
+  depth: 6
+  heads: 3
+  mlp_ratio: 4
+  pred_depth: 4
+  ema_tau: 0.996
+  vicreg_var: 0.10     # 消融中点：补齐 λ ∈ {0.05, 0.10, 0.15} 三个点
+  vicreg_cov: 0.01
+
+train:
+  batch: 3             # 实测 batch 4 会占到 7.88/8.0 GB，余量只剩 271 MB，
+                       # 一旦评测阶段多分配就 OOM。降到 3 换安全余量。
+  grad_accum: 3        # 有效 batch 9
+  lr: 0.001
+  weight_decay: 0.05
+  warmup_epochs: 3
+  steps_per_epoch: 400
+  epochs: 20
+  amp: bf16
+  grad_clip: 1.0
+
+eval:
+  horizons: [1, 2, 3, 4, 5]
