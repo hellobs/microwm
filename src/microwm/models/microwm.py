@@ -214,6 +214,16 @@ class MicroJEPA(nn.Module):
 
     # ---------- 推理：闭环滚动 ----------
 
+    def rollout_latents(self, past: torch.Tensor, horizon: int = 5) -> torch.Tensor:
+        """闭环滚动的隐状态序列 [B, horizon, N, D]，不经过探针。"""
+        z = self.encode(past)
+        outs = []
+        for _ in range(horizon):
+            nxt = self.predictor(z)
+            outs.append(nxt)
+            z = torch.cat([z, nxt.unsqueeze(1)], dim=1)
+        return torch.stack(outs, dim=1)
+
     def rollout(self, past: torch.Tensor, horizon: int = 5, closed_loop: bool = True,
                 future: torch.Tensor | None = None) -> torch.Tensor:
         """闭环：把自己的预测拼回输入继续预测，全程不看真实未来。
@@ -221,14 +231,21 @@ class MicroJEPA(nn.Module):
         返回 [B, horizon, 1, grid_h, grid_w] 的占据概率。
         closed_loop=False 时必须提供 future，用于对照（teacher forcing）。
         """
+        if closed_loop or future is None:
+            z = self.encode(past)
+            outs = []
+            for _ in range(horizon):
+                nxt = self.predictor(z)
+                outs.append(self.probe(nxt, self.tok_h, self.tok_w).sigmoid())
+                z = torch.cat([z, nxt.unsqueeze(1)], dim=1)
+            return torch.stack(outs, dim=1)
+
         z = self.encode(past)
         outs = []
         for step in range(horizon):
             nxt = self.predictor(z)
             outs.append(self.probe(nxt, self.tok_h, self.tok_w).sigmoid())
-            if closed_loop or future is None:
-                z = torch.cat([z, nxt.unsqueeze(1)], dim=1)
-            else:
-                with torch.no_grad():
-                    z = torch.cat([z, self.teacher(future[:, step:step + 1])], dim=1)
+            with torch.no_grad():
+                z = torch.cat([z, self.teacher(future[:, step:step + 1])], dim=1)
         return torch.stack(outs, dim=1)
+

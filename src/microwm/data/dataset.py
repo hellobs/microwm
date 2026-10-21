@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import cv2
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -56,6 +57,8 @@ class ClipDataset(Dataset):
         stride: int = 2,
         grid_w: int = G_W,
         grid_h: int = G_H,
+        img_w: int | None = None,
+        img_h: int | None = None,
     ) -> None:
         self.root = Path(root) / split
         self.clip_len = clip_len
@@ -63,6 +66,8 @@ class ClipDataset(Dataset):
         self.stride = stride
         self.grid_w = grid_w
         self.grid_h = grid_h
+        self.img_w = img_w
+        self.img_h = img_h
         self.span = (clip_len + pred_len - 1) * stride + 1
 
         index = json.loads((self.root / "index.json").read_text(encoding="utf-8"))
@@ -99,6 +104,14 @@ class ClipDataset(Dataset):
         idx = [start + k * self.stride for k in range(total)]
 
         frames = np.stack([np.asarray(imgs[j], dtype=np.float32) / 127.5 - 1.0 for j in idx])
+
+        # 预处理分辨率可能与配置不同（例如 smoke 用 96×54）。
+        # 这里按配置重采样，保证 config 是唯一的事实来源。
+        if self.img_h and (frames.shape[1] != self.img_h or frames.shape[2] != self.img_w):
+            frames = np.stack([
+                cv2.resize(f, (self.img_w, self.img_h), interpolation=cv2.INTER_AREA)
+                for f in frames
+            ])
         occs = np.stack([rasterize(per_frame.get(j, np.zeros((0, 4), np.float32)),
                                    self.grid_w, self.grid_h)
                          for j in idx])
