@@ -1,0 +1,171 @@
+\documentclass[12pt,a4paper]{ctexart}
+
+% ---------- 版面 ----------
+% 对齐 Word 的 A4 默认版式：左右 3.17cm，上下 2.54cm
+\usepackage[left=3.17cm,right=3.17cm,top=2.54cm,bottom=2.54cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\usepackage{siunitx}
+
+\linespread{1.5}\selectfont
+\captionsetup{font=small,labelsep=quad}
+\setlist[itemize]{leftmargin=1.4em,itemsep=2pt,topsep=3pt}
+\setlist[enumerate]{leftmargin=1.6em,itemsep=2pt,topsep=3pt}
+
+\newcommand{\todo}[1]{\textcolor{red}{[待补：#1]}}
+
+}
+\date{}
+
+\title{面向小型无人机场景的动作条件隐空间预测与局部路径修正}
+\author{张子睿　盛祺　刘子瑄　马婧怡\\[4pt] 华南理工大学}
+\date{}
+\begin{document}
+\pagestyle{plain}
+\thispagestyle{empty}
+
+\vspace{8pt}
+
+% ---------- 摘要 ----------
+\begingroup\small
+\noindent\textbf{摘要：}小型无人机在地块分散、视野受限的场景中飞行时，需要在看清障碍之前判断``接下来哪些区域会被占据''，才能及时调整路径。现有视频预测研究多以被动观测为设定，只预测画面如何变化，不把飞控动作作为输入，因而无法回答``如果执行某个动作会怎样''。
+
+本文以仿真为数据来源：在 Unreal Engine 中构建采集管线，同步记录相机画面、相机位姿、飞控动作与占据真值；训练一个约 5\,M 参数的隐空间预测模型，以 8 帧观测与候选动作作为输入，输出未来 1 秒的占据分布，并以指数滑动平均目标编码器与方差/协方差正则抑制表征退化。模型被接入分层规划：全局路径由 A* 依据静态地图生成，模型仅修正在途的局部路径，使世界模型的贡献与全局规划解耦。
+
+在同一全局路径下对照两种安全判据，以模型预测代替当前帧判断后，碰撞次数由 \todo{X} 降至 \todo{Y}（下降 \todo{Z\%}）。正则强度的三点对照进一步表明其与下游精度呈非单调关系；当正则过弱时，隐空间预测误差仍接近最优，而下游指标全部为零，说明该类误差不能单独作为评估依据。
+
+\vspace{6pt}
+\noindent\textbf{关键词：}隐空间预测；动作条件；无人机避障；分层规划
+\endgroup
+
+\vspace{8pt}
+\noindent\rule{\textwidth}{0.6pt}
+\vspace{12pt}
+
+
+% ================= 1 引言 =================
+\section{引言}
+
+无人机在小型农业与园区巡检中的应用逐渐增多。此类场景地块面积小、分布分散、边界不规则，大型农机难以适配，作业主要依赖小型多旋翼飞行器。在这类环境中，飞行器需要在视野受限的条件下判断``接下来哪些区域会被占据''，以支持避障与路径调整。
+
+现有的视频预测方法多针对被动观测，回答的是``接下来画面会如何变化''，而不回答``如果执行某个动作会如何变化''。后者才是决策所需的信息，其建模要求将动作作为显式输入。
+
+将动作引入预测模型，存在三个具体困难。
+
+\textbf{其一，缺少动作条件的数据。}公开的无人机视觉数据集以检测与跟踪为目标构建，只提供图像与目标框，不含相机位姿与飞控指令，无法支撑动作条件预测的训练与评估。
+
+\textbf{其二，缺少有判别力的评估指标。}在持续性主导的场景中，全图 IoU 会被大量静止区域稀释。本文在 VisDrone 上的实测显示，``未来等于现在''的平凡基线在预测 5 步后仍取得 0.406 的全图 IoU，该指标不足以判别模型是否学到动力学。
+
+\textbf{其三，小模型下的表征坍缩。}隐空间预测存在退化解：当编码器对所有输入输出同一向量时，预测误差为零而表征不含信息。抑制该解需要两个约束，即目标编码器的指数滑动平均（EMA）与表征的方差/协方差正则（VICReg）。
+
+针对上述问题，本文以仿真为数据来源构建动作条件世界模型，并将其接入分层规划框架。工作内容如下：
+
+\begin{enumerate}
+  \item \textbf{数据}：在 Unreal Engine 中建立采集管线，同步记录相机画面、位姿、飞控动作与占据真值，形成具有因果结构的数据集；
+  \item \textbf{模型}：训练约 5\,M 参数的隐空间预测模型，输入为 8 帧观测与候选动作，输出未来 1 秒的占据分布，以 EMA 目标编码器与 VICReg 抑制坍缩；
+  \item \textbf{系统}：全局路径由 A* 依据静态地图生成，世界模型仅修正在途的局部路径，使``世界模型的价值''与``全局规划的价值''解耦；
+  \item \textbf{评估}：在同一全局路径下，对照``以当前帧判断安全性''与``以模型预测判断安全性''的碰撞次数。
+\end{enumerate}
+
+本文全部实验在仿真中完成，不包含真机验证，也不包含风扰、通信延迟等真实扰动。
+
+% ================= 2 相关工作 =================
+\section{相关工作}
+
+\subsection{隐空间预测}
+\todo{200 字：JEPA 与 V-JEPA 的预测目标；VICReg 的方差/协方差约束；为何不在像素空间预测}
+
+\subsection{无人机视觉导航中的世界模型}
+\todo{150 字：MAD 以占据/可见性图为预测目标；AirDreamer 的 Dreamer 式结构；FlowPilot/AeroAct 将世界模型限制在训练阶段}
+
+\subsection{分层规划}
+\todo{80 字：全局规划与局部修正的经典两段式；本文沿用该结构以便解耦评估}
+
+% ================= 3 方法 =================
+\section{方法}
+
+\subsection{数据采集}
+\todo{250 字：场景构成、采集内容（画面/位姿/动作/占据）、动作定义、分辨率与帧率}
+
+\subsection{模型结构}
+\todo{300 字：编码器、预测器、EMA 目标、探针；参数量与显存}
+
+\subsection{训练目标}
+预测损失定义为预测表征与目标表征之间的余弦距离：
+\begin{equation}
+\mathcal{L}_{\text{pred}} = \frac{1}{K}\sum_{k=1}^{K}\Bigl(1-\cos\bigl(\hat{z}_{t+k},\,z_{t+k}\bigr)\Bigr),
+\end{equation}
+并以 VICReg 的方差项与协方差项约束表征：
+\begin{equation}
+\mathcal{L} = \mathcal{L}_{\text{pred}} + \lambda_{\text{var}}\mathcal{L}_{\text{var}} + \lambda_{\text{cov}}\mathcal{L}_{\text{cov}}.
+\end{equation}
+\todo{补：各项的作用与取值}
+
+\subsection{规划接口}
+\todo{200 字：A* 生成全局路径；每 0.5 s 用模型预测局部占据并判断安全性；必要时横向偏移}
+
+% ================= 4 实验 =================
+\section{实验}
+
+\subsection{设置}
+\todo{150 字：数据规模、训练配置、评估指标定义}
+
+\subsection{正则强度的影响}
+在真实数据上对正则权重 $\lambda_{\text{var}}$ 做三点对照，结果见表~\ref{tab:lambda}。权重过小时表征坍缩，隐空间余弦接近 1 而下游指标全部归零；权重过大时表征过于分散，下游精度下降。中间取值在综合指标上最优。
+
+\begin{table}[H]
+\centering
+\caption{正则权重对照（真实数据，预测时域 5 步）。$\lambda_{\text{var}}=0.05$ 时探针不产生任何正预测，下游指标为零。}
+\label{tab:lambda}
+\begin{tabular}{lccccc}
+\toprule
+$\lambda_{\text{var}}$ & 闭环余弦 & $R_{\text{new}}$ & $P_{\text{occ}}$ & F1 & IoU \\
+\midrule
+0.05 & 0.905 & 0.000 & 0.000 & 0.000 & 0.000 \\
+0.10 & 0.640 & 0.349 & 0.412 & \textbf{0.378} & \textbf{0.190} \\
+0.15 & 0.306 & \textbf{0.507} & 0.179 & 0.265 & 0.127 \\
+\midrule
+平凡基线 & ---          & 0.000 & ---          & ---          & 0.406 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{主结果}
+\todo{250 字 + 表：碰撞次数对照（用当前帧 vs 用模型预测）}
+
+\subsection{消融}
+\todo{150 字：有动作 / 无动作 / 恒等基线三组}
+
+% ================= 5 讨论 =================
+\section{讨论}
+
+\subsection{隐空间误差不能作为评价指标}
+表~\ref{tab:lambda} 中，$\lambda_{\text{var}}=0.05$ 的模型取得最高的闭环余弦（0.905），但其下游指标全部为零。这说明隐空间预测误差在表征坍缩时会给出与真实能力相反的排序，评估必须以下游任务为准。
+
+\subsection{增益来源}
+\todo{200 字：动作条件带来的增益来自何处；与``用当前帧''的差异分析}
+
+% ================= 6 局限 =================
+\section{局限与展望}
+
+本文的工作有以下边界：全部实验在仿真中完成，未经真机验证；动作不含噪声，未建模通信延迟与风扰；预测时域为 1 秒，未涉及多机协同与长时域规划；仅建模飞行动作，未涉及农事作业动作。
+
+后续工作的一个方向是多模态融合。实际系统中观测将来自多光谱、热红外与地面传感器，其采样率与坐标系并不一致。隐空间预测不要求像素级对齐，为该类融合提供了接口。
+
+% ================= 7 结论 =================
+\section{结论}
+
+\todo{100 字：三条结论}
+
+% ================= 参考文献 =================
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\end{document}
