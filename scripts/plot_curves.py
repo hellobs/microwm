@@ -16,7 +16,14 @@ import numpy as np
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib import font_manager  # noqa: E402
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator  # noqa: E402
+
+for _name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
+    if any(_name.lower() in f.name.lower() for f in font_manager.fontManager.ttflist):
+        plt.rcParams["font.sans-serif"] = [_name]
+        plt.rcParams["axes.unicode_minus"] = False
+        break
 
 PANELS = [
     ("loss/total", "总损失", "健康：平滑下降\n病态：一条直线（学不动）"),

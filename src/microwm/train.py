@@ -104,7 +104,17 @@ def train_jepa(cfg: dict, args) -> Path:
     warm = int(total * 0.03) if t.get("warmup_epochs") else 0
     accum = t.get("grad_accum", 1)
 
-    step, t0 = 0, time.time()
+    # 断点续训：进程可能被外部杀掉，重启时不必从 0 开始
+    step = 0
+    if args.resume:
+        ck = torch.load(args.resume, map_location="cpu")
+        model.load_state_dict(ck["model"])
+        if "opt" in ck:
+            opt.load_state_dict(ck["opt"])
+        step = int(ck.get("step", 0))
+        print(f"[resume] 从 {args.resume} 的 step {step} 继续")
+
+    t0 = time.time()
     pbar = tqdm(total=total, desc="jepa")
     while step < total:
         for batch in train_loader:
@@ -138,7 +148,8 @@ def train_jepa(cfg: dict, args) -> Path:
 
             if step > 0 and step % args.save_every == 0:
                 path = out_dir / f"ckpt_{step:05d}.pt"
-                torch.save({"model": model.state_dict(), "cfg": cfg, "step": step}, path)
+                torch.save({"model": model.state_dict(), "opt": opt.state_dict(),
+                            "cfg": cfg, "step": step}, path)
                 writer.add_scalar("val/ckpt_saved", 1.0, step)
 
             if step > 0 and step % args.eval_every == 0:
@@ -173,10 +184,10 @@ def train_probe(cfg: dict, args, jepa_ckpt: Path) -> Path:
     for p in model.probe.parameters():
         p.requires_grad_(True)
 
-    opt = torch.optim.AdamW(model.probe.parameters(), lr=1e-3)
+    opt = torch.optim.AdamW(model.probe.parameters(), lr=5e-4)
     total = args.steps or 800
     step, t0 = 0, time.time()
-    pos_weight = torch.tensor([20.0], device="cuda")
+    pos_weight = torch.tensor([5.0], device="cuda")   # 20 太猛，会让探针退化成全预测 1
 
     pbar = tqdm(total=total, desc="probe")
     while step < total:
@@ -214,6 +225,8 @@ def main() -> int:
     ap.add_argument("--steps", type=int, default=0, help="0 = 用配置里的值")
     ap.add_argument("--eval-every", type=int, default=500)
     ap.add_argument("--save-every", type=int, default=500)
+    ap.add_argument("--resume", default="", help="从中断的 checkpoint 继续")
+    ap.add_argument("--jepa", default="", help="probe 阶段：指定要冻结的 jepa 权重")
     ap.add_argument("--tag", default="")
     args = ap.parse_args()
 
@@ -225,7 +238,8 @@ def main() -> int:
         ckpt = train_jepa(cfg, args)
         print(json.dumps({"ckpt": str(ckpt)}, ensure_ascii=False))
     else:
-        jepa = Path("outputs") / args.tag.replace("_probe", "_jepa") / "jepa.pt"
+        jepa = Path(args.jepa) if args.jepa else (
+            Path("outputs") / args.tag.replace("_probe", "_jepa") / "jepa.pt")
         train_probe(cfg, args, jepa)
     return 0
 

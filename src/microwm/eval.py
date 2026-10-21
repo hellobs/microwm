@@ -68,14 +68,14 @@ def main() -> int:
             s = ds[i]
             past = s["past"][None].cuda()
             fut = s["future"][None].cuda()
-            prev = s["occ_p"][-1][None].cuda()
+            prev = s["occ_p"][-1].cuda()
 
             pred = model.rollout(past, horizon=H, closed_loop=True)[0]        # [H,1,GH,GW]
             z_c = model.rollout_latents(past, horizon=H)[0]                   # [H,N,D]
             z_t = model.teacher(fut)[0]                                       # [H,N,D]
 
             for h in range(H):
-                g = s["occ_f"][h][None].cuda()
+                g = s["occ_f"][h].cuda()
                 acc["iou"][h].append(float(iou_all(pred[h], g)))
                 acc["rnew"][h].append(float(recall_new(pred[h], g, prev)))
                 acc["pocc"][h].append(float(precision_occ(pred[h], g)))

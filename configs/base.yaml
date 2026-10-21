@@ -24,8 +24,9 @@ model:
   vicreg_cov: 0.01
 
 train:
-  batch: 4             # 576 token 下 8 GB 显存只能到 4（实测峰值 6.8 GB）
-  grad_accum: 2        # 有效 batch 8
+  batch: 3             # 实测 batch 4 会占到 7.88/8.0 GB，余量只剩 271 MB，
+                       # 一旦评测阶段多分配就 OOM。降到 3 换安全余量。
+  grad_accum: 3        # 有效 batch 9
   lr: 0.001
   weight_decay: 0.05
   warmup_epochs: 3
