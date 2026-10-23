@@ -1,0 +1,40 @@
+seed: 42
+
+data:
+  kind: dronelab
+  root: "D:/zzr/data/dronelab2"
+  clip_len: 8
+  pred_len: 5
+  stride: 2
+  img_w: 192
+  img_h: 108
+  grid_w: 48
+  grid_h: 27
+  use_actions: false
+
+model:
+  patch: 6
+  dim: 192
+  depth: 6
+  heads: 3
+  mlp_ratio: 4
+  pred_depth: 4
+  ema_tau: 0.996
+  vicreg_var: 0.10
+  vicreg_cov: 0.01
+  use_actions: false
+  act_dim: 4
+
+train:
+  batch: 4
+  grad_accum: 2
+  lr: 0.001
+  weight_decay: 0.05
+  warmup_epochs: 3
+  steps_per_epoch: 300
+  epochs: 30
+  amp: bf16
+  grad_clip: 1.0
+
+eval:
+  horizons: [1, 2, 3, 4, 5]
