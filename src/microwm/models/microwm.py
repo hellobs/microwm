@@ -75,7 +75,7 @@ class Encoder(nn.Module):
 
 
 class Predictor(nn.Module):
-    """在时间轴上自回归：看第 0..t 帧，输出第 t+1 帧的 token。"""
+    """在时间轴上自回归：看第 0..t 帧（以及每帧的动作），输出第 t+1 帧的 token。"""
 
     def __init__(self, cfg: dict, n_tokens: int) -> None:
         super().__init__()
@@ -85,6 +85,16 @@ class Predictor(nn.Module):
         self.temporal = nn.Parameter(torch.zeros(1, 64, 1, dim))  # 最多 64 帧
         nn.init.trunc_normal_(self.temporal, std=0.02)
         self.in_proj = nn.Linear(dim, dim)
+        # 动作条件：把 4 维动作（机体速度 3 + 偏航率 1）投影成与 token 同维的偏置，
+        # 加在该帧所有 token 上。逐帧相加而不是全局拼接，预测器才能区分「哪一步用了什么动作」。
+        self.use_actions = cfg.get("use_actions", True)
+        self.act_dim = cfg.get("act_dim", 4)
+        if self.use_actions:
+            self.act_proj = nn.Sequential(
+                nn.Linear(self.act_dim, dim),
+                nn.GELU(),
+                nn.Linear(dim, dim),
+            )
         self.blocks = nn.ModuleList(
             [Block(dim, cfg["heads"], cfg.get("mlp_ratio", 4.0)) for _ in range(cfg["pred_depth"])]
         )
@@ -98,9 +108,12 @@ class Predictor(nn.Module):
         allowed = frame[None, :] <= frame[:, None]     # [T*N, T*N]
         return ~allowed
 
-    def forward(self, z: torch.Tensor) -> torch.Tensor:
+    def forward(self, z: torch.Tensor, act: torch.Tensor | None = None) -> torch.Tensor:
         b, t, n, d = z.shape
         x = self.in_proj(z) + self.temporal[:, :t]
+        if self.use_actions and act is not None:
+            a = self.act_proj(act.to(x.dtype))             # [B, T, D]
+            x = x + a.unsqueeze(2)                         # 广播到该帧全部 token
         x = x.flatten(1, 2)                            # [B, T*N, D]
         mask = self.causal_mask(t, n, z.device)
         for blk in self.blocks:
@@ -177,7 +190,9 @@ class MicroJEPA(nn.Module):
         loss_cov = off.pow(2).sum() / d
         return loss_var, loss_cov
 
-    def forward(self, past: torch.Tensor, future: torch.Tensor) -> dict:
+    def forward(self, past: torch.Tensor, future: torch.Tensor,
+                act_past: torch.Tensor | None = None,
+                act_future: torch.Tensor | None = None) -> dict:
         """teacher forcing：每一步都拿真实的上一帧表征作输入。"""
         b, t_in, _, h, w = past.shape
         k = future.shape[1]
@@ -190,7 +205,11 @@ class MicroJEPA(nn.Module):
         preds = []
         for step in range(k):
             inp = torch.cat([z_past, z_future[:, :step]], dim=1)
-            p = self.predictor(inp)                      # [B, N, D]
+            if act_past is not None and act_future is not None:
+                act_in = torch.cat([act_past, act_future[:, :step]], dim=1)
+            else:
+                act_in = None
+            p = self.predictor(inp, act_in)              # [B, N, D]
             preds.append(p)
             tgt = z_future[:, step].detach()
             loss_pred = loss_pred + (1 - F.cosine_similarity(p, tgt, dim=-1)).mean()
@@ -214,18 +233,30 @@ class MicroJEPA(nn.Module):
 
     # ---------- 推理：闭环滚动 ----------
 
-    def rollout_latents(self, past: torch.Tensor, horizon: int = 5) -> torch.Tensor:
-        """闭环滚动的隐状态序列 [B, horizon, N, D]，不经过探针。"""
+    def rollout_latents(self, past: torch.Tensor, horizon: int = 5,
+                        act_past: torch.Tensor | None = None,
+                        act_future: torch.Tensor | None = None) -> torch.Tensor:
+        """闭环滚动的隐状态序列 [B, horizon, N, D]，不经过探针。
+
+        act_future 是候选动作序列：闭环里每一步的输入都包含「这一步准备执行的动作」，
+        所以模型可以回答「如果这么飞，接下来会看到什么」。
+        """
         z = self.encode(past)
+        acts = act_past
         outs = []
-        for _ in range(horizon):
-            nxt = self.predictor(z)
+        for step in range(horizon):
+            nxt = self.predictor(z, acts)
             outs.append(nxt)
             z = torch.cat([z, nxt.unsqueeze(1)], dim=1)
+            if act_future is not None:
+                nxt_act = act_future[:, step:step + 1]
+                acts = nxt_act if acts is None else torch.cat([acts, nxt_act], dim=1)
         return torch.stack(outs, dim=1)
 
     def rollout(self, past: torch.Tensor, horizon: int = 5, closed_loop: bool = True,
-                future: torch.Tensor | None = None) -> torch.Tensor:
+                future: torch.Tensor | None = None,
+                act_past: torch.Tensor | None = None,
+                act_future: torch.Tensor | None = None) -> torch.Tensor:
         """闭环：把自己的预测拼回输入继续预测，全程不看真实未来。
 
         返回 [B, horizon, 1, grid_h, grid_w] 的占据概率。
@@ -233,19 +264,27 @@ class MicroJEPA(nn.Module):
         """
         if closed_loop or future is None:
             z = self.encode(past)
+            acts = act_past
             outs = []
-            for _ in range(horizon):
-                nxt = self.predictor(z)
+            for step in range(horizon):
+                nxt = self.predictor(z, acts)
                 outs.append(self.probe(nxt, self.tok_h, self.tok_w).sigmoid())
                 z = torch.cat([z, nxt.unsqueeze(1)], dim=1)
+                if act_future is not None:
+                    nxt_act = act_future[:, step:step + 1]
+                    acts = nxt_act if acts is None else torch.cat([acts, nxt_act], dim=1)
             return torch.stack(outs, dim=1)
 
         z = self.encode(past)
+        acts = act_past
         outs = []
         for step in range(horizon):
-            nxt = self.predictor(z)
+            nxt = self.predictor(z, acts)
             outs.append(self.probe(nxt, self.tok_h, self.tok_w).sigmoid())
             with torch.no_grad():
                 z = torch.cat([z, self.teacher(future[:, step:step + 1])], dim=1)
+            if act_future is not None:
+                nxt_act = act_future[:, step:step + 1]
+                acts = nxt_act if acts is None else torch.cat([acts, nxt_act], dim=1)
         return torch.stack(outs, dim=1)
 

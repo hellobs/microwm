@@ -45,6 +45,16 @@ def build_loaders(cfg: dict, batch: int) -> tuple[DataLoader, DataLoader]:
     kw = dict(clip_len=d["clip_len"], pred_len=d["pred_len"], stride=d["stride"],
               grid_w=d["grid_w"], grid_h=d["grid_h"],
               img_w=d["img_w"], img_h=d["img_h"])
+    if d.get("kind", "visdrone") == "dronelab":
+        from .data.dronelab import DroneLabClips
+
+        use_act = d.get("use_actions", True)
+        train = DroneLabClips(d["root"], split="train", use_actions=use_act, **kw)
+        val = DroneLabClips(d["root"], split="val", use_actions=use_act, **kw)
+        return (
+            DataLoader(train, batch_size=batch, shuffle=True, num_workers=0, drop_last=True),
+            DataLoader(val, batch_size=batch, shuffle=False, num_workers=0, drop_last=True),
+        )
     train = ClipDataset(d["root"], "train", **kw)
     val = ClipDataset(d["root"], "val", **kw)
     return (
@@ -75,9 +85,11 @@ def evaluate(model: MicroJEPA, loader: DataLoader, max_batches: int = 20,
             break
         past = b["past"].cuda(non_blocking=True)
         fut = b["future"].cuda(non_blocking=True)
-        pred = model.rollout(past, horizon=horizons, closed_loop=True)   # [B,H,1,GH,GW]
+        ap = b["act_past"].cuda(non_blocking=True) if "act_past" in b else None
+        af = b["act_future"].cuda(non_blocking=True) if "act_future" in b else None
+        pred = model.rollout(past, horizon=horizons, closed_loop=True, act_past=ap, act_future=af)
         z_true = model.teacher(fut)                                      # [B,H,N,D]
-        z_pred = model.rollout_latents(past, horizon=horizons)           # [B,H,N,D]
+        z_pred = model.rollout_latents(past, horizon=horizons, act_past=ap, act_future=af)
 
         prev = b["occ_p"][:, -1].cuda()
         for h in range(horizons):
@@ -125,9 +137,11 @@ def train_jepa(cfg: dict, args) -> Path:
 
             past = batch["past"].cuda(non_blocking=True)
             fut = batch["future"].cuda(non_blocking=True)
+            ap = batch["act_past"].cuda(non_blocking=True) if "act_past" in batch else None
+            af = batch["act_future"].cuda(non_blocking=True) if "act_future" in batch else None
 
             with torch.autocast("cuda", dtype=torch.bfloat16):
-                r = model(past, fut)
+                r = model(past, fut, ap, af)
                 loss = r["loss"] / accum
             loss.backward()
 
@@ -195,7 +209,10 @@ def train_probe(cfg: dict, args, jepa_ckpt: Path) -> Path:
             if step >= total:
                 break
             x = torch.cat([batch["past"], batch["future"]], dim=1).cuda(non_blocking=True)
-            y = torch.cat([batch["occ_p"], batch["occ_f"]], dim=1).cuda(non_blocking=True)
+            if "occ" in batch:
+                y = batch["occ"].cuda(non_blocking=True)
+            else:
+                y = torch.cat([batch["occ_p"], batch["occ_f"]], dim=1).cuda(non_blocking=True)
             with torch.no_grad():
                 z = model.encoder(x)                       # [B,T,N,D]
             logits = model.probe(z.flatten(0, 1), model.tok_h, model.tok_w)  # [B*T,1,GH,GW]
